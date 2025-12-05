@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Dataset (too large for GitHub)
+movies_metadata.csv
+
+# IDEs
+.vscode/
+.idea/
