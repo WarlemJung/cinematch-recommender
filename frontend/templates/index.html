@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CineMatch — Hybrid Movie Recommendation Engine powered by Python and Machine Learning">
+    <title>CineMatch | Hybrid Movie Recommendation Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+    <div class="background-glow" aria-hidden="true"></div>
+
+    <header class="site-header">
+        <div class="header-brand">
+            <a href="#top" id="brandHomeLink" class="logo" aria-label="CineMatch Página Inicial">
+                <i class="fa-solid fa-clapperboard" aria-hidden="true"></i>
+                Cine<span>Match</span>
+            </a>
+            <span class="version-badge">Hybrid ML v2.0</span>
+        </div>
+
+        <div class="search-wrapper" role="search">
+            <div class="search-container">
+                <i class="fa-solid fa-magnifying-glass search-icon" aria-hidden="true"></i>
+                <input
+                    type="text"
+                    id="movieSearch"
+                    placeholder="Busque um filme para explorar ou gerar recomendações..."
+                    autocomplete="off"
+                    aria-label="Pesquisar filmes"
+                    aria-autocomplete="list"
+                    aria-controls="autocomplete-list"
+                    aria-expanded="false"
+                >
+                <button id="clearSearchBtn" class="icon-btn hidden" type="button" aria-label="Limpar busca">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+                <button id="searchBtn" class="primary-search-btn" type="button" aria-label="Executar busca">
+                    Recomendar
+                </button>
+            </div>
+            <div id="autocomplete-list" class="autocomplete-dropdown hidden" role="listbox" aria-label="Sugestões de filmes"></div>
+        </div>
+
+        <div class="header-actions">
+            <button id="favoritesToggleBtn" class="favorites-btn" type="button" aria-label="Abrir lista de favoritos" aria-expanded="false">
+                <i class="fa-solid fa-heart" aria-hidden="true"></i>
+                <span>Favoritos</span>
+                <span id="favoritesCountBadge" class="badge-count">0</span>
+            </button>
+        </div>
+    </header>
+
+    <main id="top">
+        <!-- Hero & Filter Controls -->
+        <section id="hero-section" class="hero-section">
+            <div class="hero-badge">
+                <i class="fa-solid fa-microchip" aria-hidden="true"></i>
+                Sparse TF-IDF &bull; IMDB Weighted Rating &bull; Hybrid Ensemble
+            </div>
+            <h1>Descubra sua Próxima <span class="gradient-text">Obsessão Cinematográfica</span></h1>
+            <p class="hero-subtitle">
+                Motor híbrido de recomendação com explicabilidade em tempo real, filtragem multifacetada e busca semântica sobre mais de 45.000 filmes.
+            </p>
+
+            <!-- Filter Bar -->
+            <div class="filter-bar" role="region" aria-label="Filtros de catálogo e algoritmo">
+                <div class="filter-group">
+                    <label for="genreFilter"><i class="fa-solid fa-masks-theater" aria-hidden="true"></i> Gênero</label>
+                    <select id="genreFilter" aria-label="Filtrar por gênero">
+                        <option value="">Todos os gêneros</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="minYearFilter"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Ano Mín.</label>
+                    <input type="number" id="minYearFilter" placeholder="1950" min="1888" max="2030" aria-label="Ano mínimo">
+                </div>
+
+                <div class="filter-group">
+                    <label for="maxYearFilter"><i class="fa-regular fa-calendar-check" aria-hidden="true"></i> Ano Máx.</label>
+                    <input type="number" id="maxYearFilter" placeholder="2025" min="1888" max="2030" aria-label="Ano máximo">
+                </div>
+
+                <div class="filter-group">
+                    <label for="minRatingFilter"><i class="fa-solid fa-star" aria-hidden="true"></i> Nota Mínima</label>
+                    <select id="minRatingFilter" aria-label="Nota mínima">
+                        <option value="">Qualquer nota</option>
+                        <option value="6.0">6.0+ Boa</option>
+                        <option value="7.0">7.0+ Muito Boa</option>
+                        <option value="7.5">7.5+ Aclamada</option>
+                        <option value="8.0">8.0+ Obra-prima</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="algorithmSelect"><i class="fa-solid fa-sliders" aria-hidden="true"></i> Modo ML</label>
+                    <select id="algorithmSelect" aria-label="Selecionar algoritmo de recomendação">
+                        <option value="hybrid">Híbrido (Conteúdo + Demográfico + Colab.)</option>
+                        <option value="content">Baseado em Conteúdo (TF-IDF Esparso)</option>
+                    </select>
+                </div>
+
+                <div class="filter-actions">
+                    <button id="applyFiltersBtn" class="btn-apply" type="button">
+                        <i class="fa-solid fa-filter" aria-hidden="true"></i> Aplicar
+                    </button>
+                    <button id="resetFiltersBtn" class="btn-reset" type="button" aria-label="Limpar filtros">
+                        Limpar
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Accessible Status / Error Notification Banner -->
+        <div id="statusBanner" class="status-banner hidden" role="alert" aria-live="polite"></div>
+
+        <!-- Favorites Section (Collapsible) -->
+        <section id="favorites-section" class="content-section hidden" aria-label="Meus Filmes Favoritos">
+            <div class="section-header">
+                <div>
+                    <h2><i class="fa-solid fa-heart highlight-icon" aria-hidden="true"></i> Meus Favoritos Salvos</h2>
+                    <p class="section-subtitle">Persistidos localmente no seu navegador. Clique em qualquer filme para ver detalhes ou recomendações similares.</p>
+                </div>
+                <div class="section-controls">
+                    <button id="clearFavoritesBtn" class="btn-secondary-sm" type="button">Limpar Lista</button>
+                    <button id="closeFavoritesBtn" class="close-results" type="button" aria-label="Fechar favoritos">
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="movie-grid" id="favorites-grid"></div>
+        </section>
+
+        <!-- Recommendations Results Section -->
+        <section id="results-section" class="content-section hidden" aria-live="polite">
+            <div class="section-header">
+                <div>
+                    <h2>
+                        <i class="fa-solid fa-wand-magic-sparkles highlight-icon" aria-hidden="true"></i>
+                        Recomendações para <span id="searched-title" class="highlight">...</span>
+                    </h2>
+                    <p id="recommendation-meta" class="section-subtitle"></p>
+                </div>
+                <button id="closeResultsBtn" class="close-results" type="button" aria-label="Fechar resultados de recomendação">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="movie-grid" id="recommendations-grid"></div>
+        </section>
+
+        <!-- Catalog / Trending Section -->
+        <section id="trending-section" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2 id="catalog-section-title"><i class="fa-solid fa-fire highlight-icon" aria-hidden="true"></i> Top Charts &amp; Filmes em Alta</h2>
+                    <p id="catalog-section-subtitle" class="section-subtitle">Classificados pela fórmula bayesiana Weighted Rating (IMDB) combinando nota média e volume de votos.</p>
+                </div>
+                <div id="catalog-stats-pill" class="stats-pill"></div>
+            </div>
+
+            <div class="movie-grid" id="trending-grid" aria-live="polite"></div>
+
+            <!-- Pagination Controls -->
+            <nav id="pagination-controls" class="pagination-bar" aria-label="Paginação do catálogo">
+                <button id="prevPageBtn" class="btn-page" type="button" disabled>
+                    <i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Anterior
+                </button>
+                <span id="pageIndicator" class="page-indicator">Página 1 de 1</span>
+                <button id="nextPageBtn" class="btn-page" type="button" disabled>
+                    Próxima <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                </button>
+            </nav>
+        </section>
+    </main>
+
+    <!-- Movie Details Modal -->
+    <div id="movieModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalMovieTitle">
+        <div class="modal-card">
+            <button id="closeModalBtn" class="modal-close-btn" type="button" aria-label="Fechar detalhes do filme">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+            <div class="modal-body" id="modalBodyContent"></div>
+        </div>
+    </div>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <p><strong>CineMatch</strong> &mdash; Hybrid Movie Recommendation Engine &bull; Desenvolvido por Warlem Jung</p>
+            <p class="footer-note">Metadados e imagens fornecidos via catálogo TMDB / The Movies Dataset (uso educacional e não comercial).</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+
+</html>

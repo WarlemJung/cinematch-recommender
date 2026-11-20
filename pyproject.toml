@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cinematch-recommender"
+version = "2.0.0"
+description = "Hybrid Movie Recommendation Engine powered by Python and Machine Learning."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+    { name = "Warlem Jung" }
+]
+keywords = ["machine-learning", "recommender-system", "tf-idf", "collaborative-filtering", "hybrid-recommender", "flask"]
+dependencies = [
+    "flask>=3.0.0,<4.0.0",
+    "flask-cors>=5.0.0,<7.0.0",
+    "numpy>=2.0.0,<3.0.0",
+    "pandas>=2.2.0,<3.0.0",
+    "pydantic>=2.7.0,<3.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
+    "scikit-learn>=1.5.0,<2.0.0",
+    "scipy>=1.13.0,<2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "coverage>=7.5.0",
+    "mypy>=1.10.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.6.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+addopts = "-ra -q"
+
+[tool.coverage.run]
+source = ["src/cinematch"]
+branch = true
+omit = [
+    "src/cinematch/main.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+
+[tool.ruff]
+target-version = "py311"
+line-length = 115
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+ignore_missing_imports = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_unused_ignores = false

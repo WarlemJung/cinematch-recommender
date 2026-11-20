@@ -1,18 +1,38 @@
-# Python
+# Python bytecode & packaging
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+build/
+dist/
 
-# Environments
+# Virtual environments & secrets
 .env
-.venv
+.venv/
 env/
 venv/
 ENV/
 
-# Dataset (too large for GitHub)
-movies_metadata.csv
+# Testing & Static Analysis caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
 
-# IDEs
+# Datasets & Trained Artifacts (too large for Git)
+movies_metadata.csv
+ratings.csv
+ratings_small.csv
+data/*.csv
+data/*.parquet
+models/*.pkl
+models/*.joblib
+models/*.npz
+
+# IDEs & OS
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db

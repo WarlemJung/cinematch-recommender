@@ -1,115 +1,207 @@
-# 🎬 Movie Recommender System
+# 🎬 CineMatch — Hybrid Movie Recommendation Engine
 
-Welcome to the **Movie Recommender System**! This project is a robust Python application designed to suggest movies based on advanced data analysis techniques. Whether you're looking for the all-time greatest hits or a hidden gem similar to your favorite film, this system has you covered.
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B%20%7C%203.13-3776AB?logo=python&logoColor=white)
+![Flask 3.1](https://img.shields.io/badge/Flask-3.1-000000?logo=flask&logoColor=white)
+![Scikit-Learn](https://img.shields.io/badge/scikit--learn-Sparse%20TF--IDF%20%26%20SVD-F7931E?logo=scikit-learn&logoColor=white)
+![Pydantic v2](https://img.shields.io/badge/Pydantic-v2-E92063?logo=pydantic&logoColor=white)
+![Ruff & Mypy](https://img.shields.io/badge/Code%20Quality-Ruff%20%2B%20Mypy-261230)
+![License: MIT](https://img.shields.io/badge/License-MIT-00f2ff)
 
-## 🚀 Features
+> 🇧🇷 **[Leia a documentação em Português (README_pt.md)](README_pt.md)**
 
-### 1. 📈 Demographic Filtering (Top Charts)
-Just like IMDB's Top 250, this system identifies the best movies by calculating a **Weighted Rating (WR)**. It considers both the average rating and the number of votes to ensure that the recommended movies are both popular and highly acclaimed.
-
-*   **Algorithm**: IMDB Weighted Rating Formula.
-*   **Goal**: Recommend movies that are universally liked.
-
-### 2. 🧠 Content-Based Filtering
-Looking for something specific? This feature recommends movies that are similar to a particular movie you like. It analyzes the **plot summaries (overviews)** of movies to find similarities.
-
-*   **Algorithm**: TF-IDF (Term Frequency-Inverse Document Frequency) & Cosine Similarity.
-*   **Goal**: Recommend movies with similar storylines and themes.
+**CineMatch (`cinematch-recommender`)** is a production-grade **Hybrid Movie Recommendation Engine** built with Python, Scikit-Learn, SciPy sparse matrices, and Flask. It combines **Demographic Filtering (IMDB Bayesian Weighted Rating)**, **Sparse Content-Based Filtering (Multi-Field Weighted TF-IDF)**, and **Collaborative Filtering (TruncatedSVD Latent Factors with Cold-Start Fallback)** into an explainable ensemble served through a validated REST API and a modern dark-mode streaming interface.
 
 ---
 
-## 🛠️ Technologies Used
+## 🎯 1. Problem It Solves
 
-*   **Python 3.13.7**: The core programming language.
-*   **Pandas**: For efficient data manipulation and analysis.
-*   **Scikit-learn**: For machine learning algorithms (TF-IDF Vectorizer, Linear Kernel).
-
----
-
-## 📦 Installation & Setup
-
-1.  **Clone the repository** (or download the files).
-2.  **Install the required libraries**:
-    Open your terminal and run:
-    ```bash
-    pip install pandas scikit-learn
-    ```
-3.  **Download the Dataset**:
-    Ensure you have the `movies_metadata.csv` file in the same directory as the script.
-    [Download the dataset here](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset?resource=download&select=movies_metadata.csv)
+Traditional prototype movie recommenders suffer from three critical engineering flaws:
+1. **Quadratic Memory Blowup ($O(N^2)$):** Materializing a dense pairwise cosine similarity matrix (`linear_kernel(tfidf, tfidf)`) for 45,466 movies requires **~16.5 GB of RAM** (or ~3.2 GB even when truncated to 20,000 rows). CineMatch keeps the TF-IDF representation in **sparse CSR format (`float32`)** and computes similarity vectors **on demand in $O(\text{nnz}_{\text{query}} \cdot \bar{d})$**, processing the entire **45,430-movie catalog in just 12.30 MB of RAM** (a **99.92% memory reduction**).
+2. **Single-Signal Blindness:** Content-only models often recommend poorly rated sequels, while popularity charts ignore user taste. CineMatch blends thematic similarity, Bayesian vote-weighted acclaim, and collaborative user-item signals with **natural-language explanations** for every recommendation.
+3. **Unvalidated & Corrupted Data:** Raw movie metadata contains shifted CSV rows, duplicate IDs, missing synopses, and thousands of duplicate movie titles (e.g., remakes like *"Heat"* or *"Hamlet"*) that crash naive indexers. CineMatch enforces a strict data validation and disambiguation pipeline.
 
 ---
 
-## 🎮 How to Use
+## ✨ 2. Key Features
 
-1.  Open your terminal or command prompt.
-2.  Navigate to the project directory.
-3.  Run the script:
-    ```bash
-    python recommender.py
-    ```
-
-### 🌐 Running the Web Interface (Ultramodern UI)
-
-1.  **Install Flask**:
-    ```bash
-    pip install flask flask-cors
-    ```
-2.  **Run the App**:
-    ```bash
-    python app.py
-    ```
-3.  **Open in Browser**:
-    Go to `http://localhost:5000` to see the new interface!
-
-### What to Expect (CLI):
-
-### What to Expect:
-
-*   **Step 1**: The system will load the dataset (default sample size: 20,000 movies).
-*   **Step 2**: It will display the **Top Demographic Recommendations** (highest weighted ratings).
-*   **Step 3**: It will calculate the content similarity matrix.
-*   **Step 4**: It will display **Content-Based Recommendations** for a specific test movie (e.g., "The Lion King").
+- **Explainable Hybrid Recommendation Engine:** Generates human-readable explanations (e.g., shared franchise, thematic plot similarity, matching genres, shared studio, and weighted critical rating) alongside individual component scores.
+- **Memory-Safe Sparse Content-Based Filtering:** Namespace-weighted tokens across `overview`, `genres`, `tagline`, `belongs_to_collection`, `production_companies`, and `original_language` without materializing an $N \times N$ matrix.
+- **Bayesian Demographic Filtering (Top Charts):** Vectorized IMDB Weighted Rating with configurable vote quantile and multi-faceted filters (genre, release year range, minimum rating).
+- **Isolated Collaborative Filtering with Cold-Start Protection:** Item-based / TruncatedSVD latent factor model trained exclusively on real user-item interactions (`ratings.csv`) when available, automatically redistributing ensemble weights during cold-start without fabricating synthetic ratings.
+- **Quantitative Leakage-Free Evaluation Pipeline:** Built-in evaluation benchmark calculating `Precision@K`, `Recall@K`, `NDCG@K`, `MAP@K`, `Catalog Coverage`, `Intra-List Similarity (ILS)`, and `Recommendation Diversity`.
+- **Hardened Security (AppSec):** Zero dynamic `innerHTML` usage (100% DOM XSS-safe via `textContent`), strict TMDB poster URL regex validation, Pydantic v2 parameter validation, restricted CORS, `debug=False` enforcement in production, and sanitized error responses.
+- **Modern Streaming Dark UI:** Live search autocomplete, genre/year/rating filter bar, ML mode selector, rich movie details modal, `localStorage`-persisted Favorites watchlist, and catalog pagination.
 
 ---
 
-## 🔍 Code Overview
-
-### `MovieRecommenderSystem` Class
-
-*   **`__init__`**: Loads the data, cleans it, and prepares it for analysis.
-*   **`get_demographic_recommendations`**: Calculates the weighted score for each movie and returns the top results.
-*   **`compute_content_similarity`**: Constructs the TF-IDF matrix from movie overviews and computes the cosine similarity kernel.
-*   **`get_content_recommendations`**: Takes a movie title as input and returns a list of the most similar movies based on the computed scores.
-
----
-
-## 📝 Example Output
+## 🏗️ 3. Architecture
 
 ```text
---- Carregando dados de movies_metadata.csv ---
-Dados carregados: 20000 filmes.
+cinematch-recommender/
+├── src/
+│   └── cinematch/
+│       ├── main.py                  # Flask Application Factory (create_app)
+│       ├── config.py                # Immutable environment configuration & validation
+│       ├── api/                     # Blueprint routes, Pydantic v2 schemas & error handlers
+│       ├── data/                    # CSV loader, schema validation, cleaning & DataQualityReport
+│       ├── models/                  # Demographic, Sparse Content-Based, Collaborative, Hybrid & Evaluation
+│       ├── services/                # MovieService & RecommendationService orchestration
+│       └── utils/                   # Domain exception hierarchy & structured JSON logging
+├── frontend/
+│   ├── templates/index.html         # Accessible dark-mode streaming web interface
+│   └── static/                      # CSS design system & XSS-safe vanilla JS controller
+├── scripts/
+│   ├── validate_dataset.py          # Dataset integrity CLI & DataQualityReport generator
+│   └── train_models.py              # Model fitting, memory telemetry & quantitative benchmark CLI
+├── tests/
+│   ├── unit/                        # Unit tests (data, math formulas, models, evaluation, config)
+│   └── integration/                 # Full REST API & error-handling integration tests
+├── docs/                            # Technical audits, architecture, API, data dictionary & evaluation
+├── Dockerfile                       # Non-root production container with healthcheck
+├── docker-compose.yml               # Single-command container orchestration
+└── pyproject.toml                   # Packaging, pytest, coverage, ruff & mypy configuration
+```
 
---- Calculando Recomendação Demográfica (Top Charts) ---
-                  title  vote_count  vote_average     score
-10309  Dilwale Dulhania Le Jayenge        2000           9.1  8.615
-314             The Shawshank Redemption        8205           8.5  8.446
-834                  The Godfather        5893           8.5  8.425
-...
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for component diagrams and design decisions.
 
---- Filmes similares a 'The Lion King' ---
-34682    How the Lion Cub and the Turtle Sang a Song
-9353                                The Lion King 1½
-9115                  The Lion King 2: Simba's Pride
-...
+---
+
+## 🛠️ 4. Technologies Used
+
+- **Language:** Python 3.11+ / 3.13
+- **Machine Learning & Data:** `scikit-learn`, `scipy` (CSR sparse matrices), `pandas`, `numpy`
+- **API & Validation:** `Flask`, `flask-cors`, `pydantic` (v2), `python-dotenv`
+- **Frontend:** Semantic HTML5, Modern CSS3 (Custom Properties, Grid, Glassmorphism), Vanilla ES6+ JavaScript
+- **Quality & DevOps:** `pytest`, `pytest-cov`, `ruff`, `mypy`, Docker, GitHub Actions CI
+
+---
+
+## 🧠 5. Algorithms Implemented
+
+### 5.1. Demographic Filtering (IMDB Weighted Rating)
+$$\text{WR} = \left(\frac{v}{v + m} \times R\right) + \left(\frac{m}{v + m} \times C\right)$$
+Where $R$ is the movie's average rating, $v$ is its vote count, $m$ is the minimum votes threshold (90th percentile by default, $m = 160$ votes on the full catalog), and $C$ is the mean rating across the entire catalog ($C = 5.6182$).
+
+### 5.2. Sparse Content-Based Filtering
+Builds a weighted document per movie using namespace-isolated tokens (`genre_*`, `collection_*`, `studio_*`, `lang_*`) combined with free-text `overview` and `tagline`. Vectorized into a sparse $45,430 \times 25,000$ `float32` CSR matrix (**12.30 MB**). Similarity is computed on demand for the queried movie row $q$:
+$$\mathbf{s}(q) = \mathbf{X}_{q, :} \cdot \mathbf{X}^T$$
+
+### 5.3. Collaborative Filtering
+Applies user-mean centering and `TruncatedSVD` dimensionality reduction over real user-item rating matrices (`userId, movieId, rating`). If no external ratings file is configured or an item lacks interaction history, the model enters *Cold-Start Standby* without synthesizing interactions.
+
+### 5.4. Hybrid Weighted Ensemble
+$$\text{Score}_{\text{hybrid}}(q, i) = \hat{w}_c S_{\text{content}}(q, i) + \hat{w}_d S_{\text{demographic}}(i) + \hat{w}_{cf} S_{\text{collaborative}}(q, i)$$
+Weights $(\hat{w}_c, \hat{w}_d, \hat{w}_{cf})$ are automatically normalized to sum to `1.0` across the active models for query $q$.
+
+---
+
+## 🖥️ 6. Visual Preview
+
+The web interface features:
+- **Interactive Filter Bar:** Filter by Genre, Release Year range, Minimum Rating, and switch live between **Hybrid Ensemble** and **Content-Based TF-IDF**.
+- **Autocomplete Search:** Instant title search with release year and rating disambiguation for duplicate titles.
+- **Explainable Recommendation Cards:** Displays match percentage, individual model score chips (`Conteúdo`, `Demográfico`, `Colab`), and a natural-language explanation banner.
+- **Persisted Favorites Watchlist & Movie Details Modal:** Save favorite films in `localStorage` and inspect full cast/studio/collection metadata.
+
+---
+
+## 📦 7. Installation & Configuration
+
+### 7.1. Clone & Install Dependencies
+```bash
+git clone https://github.com/WarlemJung/cinematch-recommender.git
+cd cinematch-recommender
+pip install -r requirements.txt
+```
+
+### 7.2. Dataset Setup
+Place `movies_metadata.csv` (from [The Movies Dataset on Kaggle](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset)) in the project root or `data/movies_metadata.csv`.
+Optionally, place `ratings_small.csv` or `ratings.csv` in `data/` and set `CINEMATCH_RATINGS_PATH` to enable Collaborative Filtering.
+
+### 7.3. Environment Variables
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
 ```
 
 ---
 
-## 📄 License
+## 🚀 8. Running Locally & With Docker
 
-This project is open-source and available for educational purposes. Feel free to modify and improve it!
+### 8.1. Validate Dataset & Train/Evaluate Models
+```bash
+python scripts/validate_dataset.py
+python scripts/train_models.py --k 10 --max-queries 200
+```
+
+### 8.2. Start the Web Application
+```bash
+python -m cinematch.main
+# Or via the root entrypoint:
+python app.py
+```
+Open `http://localhost:5000` in your browser.
+
+### 8.3. Run with Docker Compose
+```bash
+docker compose up --build -d
+```
 
 ---
 
-*Created with ❤️ by Warlem Jung*
+## 🔌 9. REST API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | Web user interface |
+| `GET` | `/api/health` | Service health check, sparse matrix memory usage & data quality report |
+| `GET` | `/api/trending` | Paginated top movies by Weighted Rating (supports `genre`, `min_year`, `max_year`, `min_rating`) |
+| `GET` | `/api/genres` | List of catalog genres and movie counts |
+| `GET` | `/api/movies/search` | Paginated title search (`?q=...`) with multi-filter support |
+| `GET` | `/api/movies/<movie_id>` | Detailed metadata for a specific movie ID |
+| `GET` | `/api/recommend/<movie_id>` | Content-based recommendations by movie ID (also supports `/api/recommend?title=...`) |
+| `GET` | `/api/recommendations/hybrid/<movie_id>` | Explainable hybrid recommendations by movie ID (also supports `/api/recommendations/hybrid?title=...`) |
+
+Full payload examples are documented in [docs/API.md](docs/API.md).
+
+---
+
+## 🧪 10. Automated Testing & Quality Checks
+
+```bash
+# Run unit and integration test suites with coverage enforcement (>= 80%)
+python -m pytest --cov=src/cinematch --cov-report=term-missing --cov-fail-under=80 -v
+
+# Run Ruff linter and Mypy static type checker
+python -m ruff check src tests scripts app.py recommender.py
+python -m mypy src tests scripts app.py recommender.py
+```
+
+---
+
+## 📊 11. Quantitative Evaluation Results
+
+Measured on the full validated catalog (`N = 45,430` movies, `K = 10`, `Q = 200` queries) using the **Feature-Holdout Anti-Leakage Protocol** (where `belongs_to_collection` is withheld from training features and used strictly as the ground-truth relevance oracle):
+
+| Algorithm | Precision@10 | Recall@10 | NDCG@10 | MAP@10 | Catalog Coverage | Intra-List Similarity | Diversity |
+|---|---|---|---|---|---|---|---|
+| **Demographic Filtering** | `0.0000` | `0.0000` | `0.0000` | `0.0000` | `0.0002` | `0.0171` | `0.9829` |
+| **Content-Based Filtering** | **`0.2050`** | **`0.4156`** | **`0.4108`** | **`0.3332`** | **`0.0359`** | `0.2449` | `0.7551` |
+| **Hybrid Recommendation** | `0.1510` | `0.2970` | `0.3292` | `0.2705` | `0.0210` | `0.1363` | **`0.8637`** |
+
+See [docs/MODEL_EVALUATION.md](docs/MODEL_EVALUATION.md) for full methodology and analysis.
+
+---
+
+## ⚠️ 12. Known Limitations
+
+1. **External User Ratings Optionality:** `movies_metadata.csv` contains aggregated vote counts/averages rather than individual user rating logs. Unless a MovieLens-compatible `ratings.csv` is configured via `CINEMATCH_RATINGS_PATH`, Collaborative Filtering remains in cold-start standby mode and the Hybrid engine redistributes weights across Content-Based and Demographic components.
+2. **English-Centric Synopses:** Plot overviews in `movies_metadata.csv` are primarily in English, though structured tokens (genres, collections, studios, original language) operate language-independently.
+
+---
+
+## 📄 13. License & Credits
+
+- **License:** Distributed under the [MIT License](LICENSE).
+- **Author:** Created by **Warlem Jung**.
+- **Dataset Attribution:** Metadata sourced from *The Movies Dataset* (TMDB / GroupLens MovieLens).

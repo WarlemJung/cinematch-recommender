@@ -1,0 +1,26 @@
+services:
+  cinematch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cinematch-recommender
+    ports:
+      - "${CINEMATCH_PORT:-5000}:5000"
+    environment:
+      - CINEMATCH_ENV=production
+      - CINEMATCH_HOST=0.0.0.0
+      - CINEMATCH_PORT=5000
+      - CINEMATCH_DEBUG=false
+      - CINEMATCH_LOG_LEVEL=${CINEMATCH_LOG_LEVEL:-INFO}
+      - CINEMATCH_CORS_ORIGINS=${CINEMATCH_CORS_ORIGINS:-http://localhost:5000,http://127.0.0.1:5000}
+      - CINEMATCH_DATASET_PATH=/app/data/movies_metadata.csv
+      - TMDB_IMAGE_BASE_URL=${TMDB_IMAGE_BASE_URL:-https://image.tmdb.org/t/p/w500}
+    volumes:
+      - ./movies_metadata.csv:/app/data/movies_metadata.csv:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

@@ -1,0 +1,61 @@
+name: CineMatch CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  quality-and-tests:
+    name: Lint, Typecheck, Test & Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pip-audit
+
+      - name: Verify Python syntax compilation
+        run: |
+          python -m py_compile app.py recommender.py
+          python -m compileall -q src tests scripts
+
+      - name: Run Ruff linter
+        run: |
+          ruff check src tests scripts app.py recommender.py
+
+      - name: Run Mypy static type checker
+        run: |
+          mypy src tests scripts app.py recommender.py
+
+      - name: Run Unit tests
+        run: |
+          pytest tests/unit -v
+
+      - name: Run Integration tests
+        run: |
+          pytest tests/integration -v
+
+      - name: Enforce Test Coverage (>= 80%)
+        run: |
+          pytest --cov=src/cinematch --cov-report=term-missing --cov-fail-under=80
+
+      - name: Run Dependency Security Audit
+        run: |
+          pip check
+          pip-audit --skip-editable
