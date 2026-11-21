@@ -41,6 +41,7 @@ cinematch-recommender/
 ├── src/
 │   └── cinematch/
 │       ├── main.py                  # Flask Application Factory (create_app)
+│       ├── wsgi.py                  # Production WSGI singleton entrypoint (Gunicorn)
 │       ├── config.py                # Immutable environment configuration & validation
 │       ├── api/                     # Blueprint routes, Pydantic v2 schemas & error handlers
 │       ├── data/                    # CSV loader, schema validation, cleaning & DataQualityReport
@@ -115,7 +116,7 @@ pip install -r requirements.txt
 ```
 
 ### 7.2. Dataset Setup
-Place `movies_metadata.csv` (from [The Movies Dataset on Kaggle](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset)) in the project root or `data/movies_metadata.csv`.
+Place `movies_metadata.csv` (from [The Movies Dataset on Kaggle](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset)) in the standardized `data/movies_metadata.csv` directory.
 Optionally, place `ratings_small.csv` or `ratings.csv` in `data/` and set `CINEMATCH_RATINGS_PATH` to enable Collaborative Filtering.
 
 ### 7.3. Environment Variables
@@ -131,14 +132,16 @@ cp .env.example .env
 ### 8.1. Validate Dataset & Train/Evaluate Models
 ```bash
 python scripts/validate_dataset.py
-python scripts/train_models.py --k 10 --max-queries 200
+python scripts/train_models.py --k 10 --max-queries 200 --seed 42 --sensitivity
 ```
 
-### 8.2. Start the Web Application
+### 8.2. Start the Web Application (Production WSGI vs. Local Dev)
 ```bash
+# Production WSGI server (Linux / macOS / Container):
+PYTHONPATH=src gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 --preload cinematch.wsgi:app
+
+# Local development server (Windows / macOS / Linux):
 python -m cinematch.main
-# Or via the root entrypoint:
-python app.py
 ```
 Open `http://localhost:5000` in your browser.
 
@@ -181,15 +184,15 @@ python -m mypy src tests scripts app.py recommender.py
 
 ## 📊 11. Quantitative Evaluation Results
 
-Measured on the full validated catalog (`N = 45,430` movies, `K = 10`, `Q = 200` queries) using the **Feature-Holdout Anti-Leakage Protocol** (where `belongs_to_collection` is withheld from training features and used strictly as the ground-truth relevance oracle):
+Measured on the full validated catalog (`N = 45,430` movies, `K = 10`, `Q = 200` queries, `seed = 42`) using the **Feature-Holdout Anti-Leakage Protocol** (where `belongs_to_collection` is withheld from training features and combined with genre intersection strictly as the ground-truth relevance oracle):
 
 | Algorithm | Precision@10 | Recall@10 | NDCG@10 | MAP@10 | Catalog Coverage | Intra-List Similarity | Diversity |
 |---|---|---|---|---|---|---|---|
-| **Demographic Filtering** | `0.0000` | `0.0000` | `0.0000` | `0.0000` | `0.0002` | `0.0171` | `0.9829` |
-| **Content-Based Filtering** | **`0.2050`** | **`0.4156`** | **`0.4108`** | **`0.3332`** | **`0.0359`** | `0.2449` | `0.7551` |
-| **Hybrid Recommendation** | `0.1510` | `0.2970` | `0.3292` | `0.2705` | `0.0210` | `0.1363` | **`0.8637`** |
+| **Demographic Filtering** | `0.0000` | `0.0000` | `0.0000` | `0.0000` | `0.0002` | `0.0171` | **`0.9829`** |
+| **Content-Based Filtering** | `0.2045` | `0.4231` | `0.4244` | `0.3531` | `0.0350` | `0.2508` | `0.7492` |
+| **Hybrid Recommendation** | **`0.2070`** | **`0.4358`** | **`0.4290`** | **`0.3558`** | **`0.0354`** | `0.2485` | `0.7515` |
 
-See [docs/MODEL_EVALUATION.md](docs/MODEL_EVALUATION.md) for full methodology and analysis.
+See [docs/MODEL_EVALUATION.md](docs/MODEL_EVALUATION.md) for full methodology, hybrid weight sensitivity analysis, and formulas.
 
 ---
 

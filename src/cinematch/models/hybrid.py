@@ -17,8 +17,8 @@ from cinematch.utils.exceptions import InvalidParameterError, ModelNotTrainedErr
 class HybridWeights:
     """Configurable base weights for the Hybrid Recommender."""
 
-    content: float = 0.65
-    demographic: float = 0.25
+    content: float = 0.75
+    demographic: float = 0.15
     collaborative: float = 0.10
 
     def normalize(self, include_collaborative: bool) -> dict[str, float]:
@@ -66,7 +66,8 @@ class HybridRecommendationItem:
 class HybridRecommender:
     """
     Combines Content-Based, Demographic, and (when available) Collaborative Filtering
-    with dynamic weight normalization and transparent natural-language explanations.
+    with query-relative score calibration, thematic relevance gating, dynamic weight
+    normalization, and transparent natural-language explanations.
     """
 
     def __init__(
@@ -95,12 +96,12 @@ class HybridRecommender:
         movies_df: pd.DataFrame,
         ratings_df: pd.DataFrame | None = None,
     ) -> HybridRecommender:
-        """Fit or synchronize underlying models on the catalog DataFrame."""
+        """Fit or synchronize underlying models on the catalog DataFrame without duplicate fitting."""
         if not self.demographic_model.is_fitted:
             self.demographic_model.fit(movies_df)
         if not self.content_model.is_fitted:
             self.content_model.fit(movies_df)
-        if self.collaborative_model is not None and not self.collaborative_model.is_available:
+        if self.collaborative_model is not None and not self.collaborative_model.is_fitted:
             self.collaborative_model.fit(movies_df, ratings_df=ratings_df)
 
         self._df = movies_df.copy().reset_index(drop=True)
@@ -144,7 +145,7 @@ class HybridRecommender:
         if cand_studios:
             reasons.append(f"foi produzido pelo mesmo estúdio ({cand_studios[0]})")
 
-        if collaborative_score is not None and collaborative_score >= 0.55:
+        if collaborative_score is not None and collaborative_score >= 0.25:
             reasons.append("demonstra forte padrão de preferência entre usuários com histórico similar")
 
         vote_avg = float(candidate_row.get("vote_average", 0.0))
@@ -175,7 +176,14 @@ class HybridRecommender:
     ) -> list[HybridRecommendationItem]:
         """
         Compute hybrid recommendations for a target movie_id or title.
-        Adjusts weights automatically if Collaborative Filtering is unavailable for the target movie.
+
+        Score Calibration & Gating:
+        - Raw TF-IDF cosine similarities have a compressed upper bound (~0.25-0.55) compared to
+          global normalized Weighted Ratings (0.0-1.0). We scale query content scores by the
+          query's maximum non-self similarity so both signals share a commensurate [0, 1] range.
+        - A thematic relevance gate attenuates the demographic popularity boost for candidates
+          with near-zero content and collaborative similarity, preventing unrelated global
+          blockbusters from dominating personalized movie-to-movie recommendations.
         """
         if not self.is_fitted or self._df is None:
             raise ModelNotTrainedError("HybridRecommender")
@@ -186,7 +194,15 @@ class HybridRecommender:
         source_row = self._df.iloc[target_idx]
         target_movie_id = int(source_row["movie_id"])
 
-        content_scores = self.content_model.compute_similarity_for_index(target_idx)
+        raw_content_scores = self.content_model.compute_similarity_for_index(target_idx)
+        raw_content_scores[target_idx] = 0.0
+
+        max_content = float(np.max(raw_content_scores))
+        if max_content > 1e-6:
+            scaled_content_scores = raw_content_scores / max_content
+        else:
+            scaled_content_scores = raw_content_scores.copy()
+
         demographic_scores = self.demographic_model.get_normalized_scores()
 
         collab_scores: np.ndarray | None = None
@@ -196,9 +212,21 @@ class HybridRecommender:
         has_collab = collab_scores is not None
         active_weights = self.weights.normalize(include_collaborative=has_collab)
 
+        # Thematic relevance gate: demographic score boosts relevant candidates rather than
+        # promoting unrelated blockbusters with 0.0 content/collaborative similarity.
+        if max_content > 1e-6:
+            personalized_signal = scaled_content_scores.copy()
+            if has_collab and collab_scores is not None:
+                personalized_signal = np.maximum(personalized_signal, collab_scores)
+            relevance_gate = np.clip(personalized_signal / 0.25, 0.0, 1.0)
+        else:
+            relevance_gate = np.ones_like(demographic_scores)
+
+        gated_demographic_scores = demographic_scores * relevance_gate
+
         final_scores = (
-            active_weights["content"] * content_scores
-            + active_weights["demographic"] * demographic_scores
+            active_weights["content"] * scaled_content_scores
+            + active_weights["demographic"] * gated_demographic_scores
         )
         if has_collab and collab_scores is not None:
             final_scores = final_scores + active_weights["collaborative"] * collab_scores
@@ -235,7 +263,7 @@ class HybridRecommender:
         recommendations: list[HybridRecommendationItem] = []
         for idx in top_indices:
             cand = self._df.iloc[idx]
-            c_score = round(float(content_scores[idx]), 4)
+            c_score = round(float(raw_content_scores[idx]), 4)
             d_score = round(float(demographic_scores[idx]), 4)
             cf_score = round(float(collab_scores[idx]), 4) if (has_collab and collab_scores is not None) else None
             f_score = round(float(final_scores[idx]), 4)

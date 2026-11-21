@@ -14,13 +14,16 @@ services:
       - CINEMATCH_LOG_LEVEL=${CINEMATCH_LOG_LEVEL:-INFO}
       - CINEMATCH_CORS_ORIGINS=${CINEMATCH_CORS_ORIGINS:-http://localhost:5000,http://127.0.0.1:5000}
       - CINEMATCH_DATASET_PATH=/app/data/movies_metadata.csv
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-2}
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-120}
+      - GUNICORN_GRACEFUL_TIMEOUT=${GUNICORN_GRACEFUL_TIMEOUT:-30}
       - TMDB_IMAGE_BASE_URL=${TMDB_IMAGE_BASE_URL:-https://image.tmdb.org/t/p/w500}
     volumes:
-      - ./movies_metadata.csv:/app/data/movies_metadata.csv:ro
+      - ./data/movies_metadata.csv:/app/data/movies_metadata.csv:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=4)"]
+      test: ["CMD", "python", "-c", "import urllib.request, sys; res = urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=4); sys.exit(0 if res.status == 200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 20s

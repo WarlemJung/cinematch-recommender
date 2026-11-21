@@ -31,13 +31,14 @@ Retorna o estado operacional da aplicação, métricas de memória da matriz esp
 {
   "status": "healthy",
   "service": "CineMatch Hybrid Recommendation Engine",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "catalog_size": 45430,
   "models": {
     "demographic_fitted": true,
     "content_based_fitted": true,
     "collaborative_available": false,
     "collaborative_covered_movies": 0,
+    "collaborative_distinct_users": 0,
     "hybrid_fitted": true,
     "tfidf_matrix_shape": [45430, 25000],
     "tfidf_sparse_memory_mb": 12.303

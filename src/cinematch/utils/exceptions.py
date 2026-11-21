@@ -25,7 +25,8 @@ class DatasetNotFoundError(CineMatchError):
 
     def __init__(self, filepath: str) -> None:
         super().__init__(
-            f"Dataset file not found at '{filepath}'.",
+            f"Dataset file not found at '{filepath}'. Place 'movies_metadata.csv' in 'data/movies_metadata.csv' "
+            "or set the CINEMATCH_DATASET_PATH environment variable.",
             status_code=503,
             error_code="DATASET_NOT_FOUND",
         )

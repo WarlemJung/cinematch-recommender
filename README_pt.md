@@ -41,6 +41,7 @@ cinematch-recommender/
 ├── src/
 │   └── cinematch/
 │       ├── main.py                  # Flask Application Factory (create_app)
+│       ├── wsgi.py                  # Entrypoint WSGI singleton de produção (Gunicorn)
 │       ├── config.py                # Configuração imutável por ambiente e validação
 │       ├── api/                     # Rotas Blueprint, schemas Pydantic v2 e error handlers
 │       ├── data/                    # Loader CSV, validação de schema, limpeza e DataQualityReport
@@ -105,7 +106,7 @@ pip install -r requirements.txt
 ```
 
 ### 6.2. Dataset
-Coloque o arquivo `movies_metadata.csv` ([The Movies Dataset no Kaggle](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset)) na raiz do projeto ou em `data/movies_metadata.csv`.
+Coloque o arquivo `movies_metadata.csv` ([The Movies Dataset no Kaggle](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset)) no caminho padronizado `data/movies_metadata.csv`.
 Opcionalmente, adicione `ratings_small.csv` ou `ratings.csv` em `data/` e configure `CINEMATCH_RATINGS_PATH` para habilitar a Filtragem Colaborativa.
 
 ### 6.3. Variáveis de Ambiente
@@ -121,14 +122,16 @@ cp .env.example .env
 ### 7.1. Validar Dataset e Executar Avaliação Quantitativa
 ```bash
 python scripts/validate_dataset.py
-python scripts/train_models.py --k 10 --max-queries 200
+python scripts/train_models.py --k 10 --max-queries 200 --seed 42 --sensitivity
 ```
 
-### 7.2. Iniciar a Aplicação Web
+### 7.2. Iniciar a Aplicação Web (WSGI Produção vs. Desenvolvimento Local)
 ```bash
+# Servidor WSGI de produção (Linux / macOS / Container):
+PYTHONPATH=src gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 --preload cinematch.wsgi:app
+
+# Servidor local de desenvolvimento (Windows / macOS / Linux):
 python -m cinematch.main
-# Ou através do entrypoint compatível na raiz:
-python app.py
 ```
 Acesse `http://localhost:5000` no navegador.
 
@@ -171,15 +174,15 @@ python -m mypy src tests scripts app.py recommender.py
 
 ## 📊 10. Métricas Reais de Avaliação
 
-Medidas sobre o catálogo completo validado (`N = 45.430` filmes, `K = 10`, `Q = 200` consultas) utilizando o **Protocolo Anti-Leakage de Holdout de Atributo** (onde `belongs_to_collection` é ocultado das features de treino e utilizado exclusivamente como oráculo ground-truth de teste):
+Medidas sobre o catálogo completo validado (`N = 45.430` filmes, `K = 10`, `Q = 200` consultas, `seed = 42`) utilizando o **Protocolo Anti-Leakage de Holdout de Atributo** (onde `belongs_to_collection` é ocultado das features de treino e combinado com verificação de interseção de gênero exclusivamente como oráculo ground-truth de teste):
 
 | Algoritmo | Precision@10 | Recall@10 | NDCG@10 | MAP@10 | Catalog Coverage | Intra-List Similarity | Diversity |
 |---|---|---|---|---|---|---|---|
-| **Demographic Filtering** | `0.0000` | `0.0000` | `0.0000` | `0.0000` | `0.0002` | `0.0171` | `0.9829` |
-| **Content-Based Filtering** | **`0.2050`** | **`0.4156`** | **`0.4108`** | **`0.3332`** | **`0.0359`** | `0.2449` | `0.7551` |
-| **Hybrid Recommendation** | `0.1510` | `0.2970` | `0.3292` | `0.2705` | `0.0210` | `0.1363` | **`0.8637`** |
+| **Demographic Filtering** | `0.0000` | `0.0000` | `0.0000` | `0.0000` | `0.0002` | `0.0171` | **`0.9829`** |
+| **Content-Based Filtering** | `0.2045` | `0.4231` | `0.4244` | `0.3531` | `0.0350` | `0.2508` | `0.7492` |
+| **Hybrid Recommendation** | **`0.2070`** | **`0.4358`** | **`0.4290`** | **`0.3558`** | **`0.0354`** | `0.2485` | `0.7515` |
 
-Consulte [docs/MODEL_EVALUATION.md](docs/MODEL_EVALUATION.md) para a metodologia detalhada.
+Consulte [docs/MODEL_EVALUATION.md](docs/MODEL_EVALUATION.md) para a metodologia detalhada e a análise de sensibilidade dos pesos híbridos.
 
 ---
 

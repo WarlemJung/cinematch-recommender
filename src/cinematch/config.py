@@ -13,12 +13,18 @@ load_dotenv()
 
 
 def _resolve_default_dataset_path() -> Path:
-    """Locate movies_metadata.csv in data/ or repository root."""
+    """
+    Resolve default dataset path following the standardized `data/movies_metadata.csv` convention,
+    with fallback to root `movies_metadata.csv` if `data/movies_metadata.csv` does not exist yet.
+    """
     repo_root = Path(__file__).resolve().parents[2]
     data_candidate = repo_root / "data" / "movies_metadata.csv"
     if data_candidate.exists():
         return data_candidate
-    return repo_root / "movies_metadata.csv"
+    root_candidate = repo_root / "movies_metadata.csv"
+    if root_candidate.exists():
+        return root_candidate
+    return data_candidate
 
 
 def _resolve_default_ratings_path() -> Path | None:
@@ -59,6 +65,11 @@ class AppConfig:
     log_json: bool = False
     cors_origins: list[str] = field(default_factory=lambda: ["http://localhost:5000", "http://127.0.0.1:5000"])
 
+    # WSGI / Gunicorn production settings
+    gunicorn_workers: int = 2
+    gunicorn_timeout: int = 120
+    gunicorn_graceful_timeout: int = 30
+
     # Data settings
     dataset_path: Path = field(default_factory=_resolve_default_dataset_path)
     ratings_path: Path | None = field(default_factory=_resolve_default_ratings_path)
@@ -79,8 +90,8 @@ class AppConfig:
     tfidf_max_features: int = 25000
 
     # Hybrid model weights
-    hybrid_weight_content: float = 0.65
-    hybrid_weight_demographic: float = 0.25
+    hybrid_weight_content: float = 0.75
+    hybrid_weight_demographic: float = 0.15
     hybrid_weight_collaborative: float = 0.10
 
     # API & pagination limits
@@ -101,6 +112,8 @@ class AppConfig:
             raise ConfigurationError("demographic_quantile must be between 0.0 and 1.0.")
         if self.max_top_n < 1 or self.default_top_n < 1 or self.default_top_n > self.max_top_n:
             raise ConfigurationError("Invalid top_n bounds in configuration.")
+        if self.gunicorn_workers < 1 or self.gunicorn_timeout < 1 or self.gunicorn_graceful_timeout < 1:
+            raise ConfigurationError("Gunicorn workers and timeouts must be positive integers.")
         if self.hybrid_weight_content < 0 or self.hybrid_weight_demographic < 0 or self.hybrid_weight_collaborative < 0:
             raise ConfigurationError("Hybrid recommendation weights must be non-negative.")
         total_hybrid = (
@@ -135,6 +148,9 @@ class AppConfig:
                 log_level=os.getenv("CINEMATCH_LOG_LEVEL", "INFO"),
                 log_json=_parse_bool(os.getenv("CINEMATCH_LOG_JSON"), default=False),
                 cors_origins=cors_origins,
+                gunicorn_workers=int(os.getenv("GUNICORN_WORKERS", "2")),
+                gunicorn_timeout=int(os.getenv("GUNICORN_TIMEOUT", "120")),
+                gunicorn_graceful_timeout=int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "30")),
                 dataset_path=dataset_path,
                 ratings_path=ratings_path,
                 sample_size=_parse_optional_int(os.getenv("CINEMATCH_SAMPLE_SIZE")),
@@ -142,8 +158,8 @@ class AppConfig:
                 demographic_quantile=float(os.getenv("CINEMATCH_DEMOGRAPHIC_QUANTILE", "0.90")),
                 demographic_min_votes=_parse_optional_int(os.getenv("CINEMATCH_DEMOGRAPHIC_MIN_VOTES")),
                 tfidf_max_features=int(os.getenv("CINEMATCH_TFIDF_MAX_FEATURES", "25000")),
-                hybrid_weight_content=float(os.getenv("CINEMATCH_HYBRID_WEIGHT_CONTENT", "0.65")),
-                hybrid_weight_demographic=float(os.getenv("CINEMATCH_HYBRID_WEIGHT_DEMOGRAPHIC", "0.25")),
+                hybrid_weight_content=float(os.getenv("CINEMATCH_HYBRID_WEIGHT_CONTENT", "0.75")),
+                hybrid_weight_demographic=float(os.getenv("CINEMATCH_HYBRID_WEIGHT_DEMOGRAPHIC", "0.15")),
                 hybrid_weight_collaborative=float(os.getenv("CINEMATCH_HYBRID_WEIGHT_COLLABORATIVE", "0.10")),
                 default_top_n=int(os.getenv("CINEMATCH_DEFAULT_TOP_N", "12")),
                 max_top_n=int(os.getenv("CINEMATCH_MAX_TOP_N", "50")),

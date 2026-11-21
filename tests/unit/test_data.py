@@ -1,4 +1,4 @@
-"""Unit tests for data loading, schema validation, cleaning, and reproducible sampling."""
+"""Unit tests for data loading, schema validation, cleaning, permissions, and reproducible sampling."""
 
 from __future__ import annotations
 
@@ -139,8 +139,16 @@ def test_movie_data_loader_from_disk_and_missing_file(
     csv_path = tmp_path / "movies.csv"
     raw_movies_dataframe.to_csv(csv_path, index=False)
 
+    # Include duplicate user-movie ratings with timestamps to verify loader deduplication
+    ratings_with_dups = pd.concat(
+        [
+            synthetic_ratings_dataframe.assign(timestamp=1000),
+            pd.DataFrame([{"user_id": 1, "movie_id": 862, "rating": 2.5, "timestamp": 500}]),
+        ],
+        ignore_index=True,
+    )
     ratings_csv = tmp_path / "ratings.csv"
-    ratings_renamed = synthetic_ratings_dataframe.rename(
+    ratings_renamed = ratings_with_dups.rename(
         columns={"user_id": "userId", "movie_id": "movieId"}
     )
     ratings_renamed.to_csv(ratings_csv, index=False)
@@ -150,4 +158,40 @@ def test_movie_data_loader_from_disk_and_missing_file(
 
     assert len(loaded.movies_df) == len(raw_movies_dataframe)
     assert loaded.ratings_df is not None
+    # Duplicate (user=1, movie=862) should be deduplicated keeping timestamp=1000 (rating=5.0)
     assert len(loaded.ratings_df) == len(synthetic_ratings_dataframe)
+    u1_m862 = loaded.ratings_df.loc[
+        (loaded.ratings_df["user_id"] == 1) & (loaded.ratings_df["movie_id"] == 862)
+    ]
+    assert len(u1_m862) == 1
+    assert float(u1_m862.iloc[0]["rating"]) == 5.0
+
+
+def test_movie_data_loader_edge_cases_empty_directory_corrupted_and_permissions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 1. Path is a directory (e.g., broken Docker volume bind mount)
+    dir_loader = MovieDataLoader(dataset_path=tmp_path)
+    with pytest.raises(DataValidationError, match="is a directory"):
+        dir_loader.load()
+
+    # 2. Empty file (0 bytes)
+    empty_file = tmp_path / "empty.csv"
+    empty_file.write_text("", encoding="utf-8")
+    with pytest.raises(DataValidationError, match="empty"):
+        MovieDataLoader(dataset_path=empty_file).load()
+
+    # 3. Invalid CSV missing required columns
+    bad_csv = tmp_path / "bad.csv"
+    bad_csv.write_text("col_a,col_b\n1,2\n", encoding="utf-8")
+    with pytest.raises(DataValidationError, match="missing required columns"):
+        MovieDataLoader(dataset_path=bad_csv).load()
+
+    # 4. PermissionError when reading file
+    def raise_perm_error(*_args: object, **_kwargs: object) -> pd.DataFrame:
+        raise PermissionError("Access denied")
+
+    monkeypatch.setattr(pd, "read_csv", raise_perm_error)
+    with pytest.raises(DataValidationError, match="Permission denied"):
+        MovieDataLoader(dataset_path=bad_csv).load()

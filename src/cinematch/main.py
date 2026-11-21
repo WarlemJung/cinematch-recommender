@@ -1,4 +1,4 @@
-"""Application Factory and main entrypoint for the CineMatch web application."""
+"""Application Factory and local development entrypoint for the CineMatch web application."""
 
 from __future__ import annotations
 
@@ -34,10 +34,11 @@ def create_app(
     Create and configure the Flask application instance using dependency injection.
 
     If `loaded_dataset` is omitted, loads and validates the dataset from `config.dataset_path`.
-    If the dataset is missing at startup, the app still boots in degraded mode so `/api/health`
-    reports HTTP 503 cleanly instead of crashing the WSGI worker.
+    If the dataset is missing or fails validation at startup, or if model fitting fails,
+    the application boots in degraded mode so `/api/health` reports HTTP 503 cleanly.
     """
     app_config = config or AppConfig.from_env()
+    app_config.validate()
     configure_logging(level=app_config.log_level, json_format=app_config.log_json)
     logger = get_logger("main")
 
@@ -49,13 +50,11 @@ def create_app(
     )
     app.config["APP_CONFIG"] = app_config
 
-    # Restrict CORS to configured origins only
     CORS(
         app,
         resources={r"/api/*": {"origins": app_config.cors_origins}},
     )
 
-    # Security response headers
     @app.after_request
     def add_security_headers(response):  # type: ignore[no-untyped-def]
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -79,33 +78,36 @@ def create_app(
             logger.error("Application started without loaded dataset: %s", exc.message)
             dataset = None
 
+    app.config["MOVIE_SERVICE"] = None
+    app.config["RECOMMENDATION_SERVICE"] = None
+
     if dataset is not None:
-        movie_service = MovieService(
-            movies_df=dataset.movies_df,
-            tmdb_image_base_url=app_config.tmdb_image_base_url,
-        )
-        rec_service = RecommendationService(
-            dataset=dataset,
-            config=app_config,
-            movie_service=movie_service,
-        )
-        app.config["MOVIE_SERVICE"] = movie_service
-        app.config["RECOMMENDATION_SERVICE"] = rec_service
-        logger.info("CineMatch services initialized with %d movies.", movie_service.catalog_size)
-    else:
-        app.config["MOVIE_SERVICE"] = None
-        app.config["RECOMMENDATION_SERVICE"] = None
+        try:
+            movie_service = MovieService(
+                movies_df=dataset.movies_df,
+                tmdb_image_base_url=app_config.tmdb_image_base_url,
+            )
+            rec_service = RecommendationService(
+                dataset=dataset,
+                config=app_config,
+                movie_service=movie_service,
+            )
+            app.config["MOVIE_SERVICE"] = movie_service
+            app.config["RECOMMENDATION_SERVICE"] = rec_service
+            logger.info("CineMatch services initialized with %d movies.", movie_service.catalog_size)
+        except Exception as exc:
+            logger.error("Failed to initialize recommendation models; entering degraded mode: %s", exc)
 
     app.register_blueprint(create_api_blueprint())
     return app
 
 
 def main() -> None:
-    """CLI entrypoint to start the CineMatch server."""
+    """Local development CLI entrypoint. In production, use `gunicorn cinematch.wsgi:app`."""
     config = AppConfig.from_env()
     app = create_app(config=config)
     app.run(host=config.host, port=config.port, debug=config.debug)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

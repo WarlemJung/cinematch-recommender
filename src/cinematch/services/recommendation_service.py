@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from cinematch import __version__
 from cinematch.config import AppConfig
 from cinematch.data.loader import LoadedDataset
 from cinematch.models.collaborative import CollaborativeRecommender
@@ -191,13 +192,14 @@ class RecommendationService:
         return {
             "status": "healthy",
             "service": "CineMatch Hybrid Recommendation Engine",
-            "version": "2.0.0",
+            "version": __version__,
             "catalog_size": self.movie_service.catalog_size,
             "models": {
                 "demographic_fitted": self.demographic_model.is_fitted,
                 "content_based_fitted": self.content_model.is_fitted,
                 "collaborative_available": self.collaborative_model.is_available,
                 "collaborative_covered_movies": self.collaborative_model.covered_movies_count,
+                "collaborative_distinct_users": self.collaborative_model.distinct_users_count,
                 "hybrid_fitted": self.hybrid_model.is_fitted,
                 "tfidf_matrix_shape": [int(tfidf_shape[0]), int(tfidf_shape[1])],
                 "tfidf_sparse_memory_mb": round(self.content_model.memory_bytes / (1024 * 1024), 3),

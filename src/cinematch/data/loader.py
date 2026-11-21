@@ -39,13 +39,44 @@ class MovieDataLoader:
         self.random_state = random_state
 
     def load(self) -> LoadedDataset:
-        """Read CSV files, validate schema, run preprocessing, and return LoadedDataset."""
-        if not self.dataset_path.exists() or not self.dataset_path.is_file():
+        """Read CSV files, validate schema and permissions, run preprocessing, and return LoadedDataset."""
+        try:
+            exists = self.dataset_path.exists()
+        except PermissionError as exc:
+            raise DataValidationError(
+                f"Permission denied when accessing dataset path '{self.dataset_path}'."
+            ) from exc
+
+        if not exists:
             raise DatasetNotFoundError(str(self.dataset_path))
+
+        if self.dataset_path.is_dir():
+            raise DataValidationError(
+                f"Dataset path '{self.dataset_path}' is a directory, not a CSV file. "
+                "Verify that data/movies_metadata.csv exists on the host before mounting."
+            )
+
+        try:
+            file_size = self.dataset_path.stat().st_size
+        except PermissionError as exc:
+            raise DataValidationError(
+                f"Permission denied when inspecting dataset file '{self.dataset_path}'."
+            ) from exc
+
+        if file_size == 0:
+            raise DataValidationError(f"Dataset file '{self.dataset_path}' is empty (0 bytes).")
 
         logger.info("Loading movie metadata from '%s'", self.dataset_path)
         try:
             raw_df = pd.read_csv(self.dataset_path, low_memory=False)
+        except PermissionError as exc:
+            raise DataValidationError(
+                f"Permission denied when reading dataset file '{self.dataset_path}'."
+            ) from exc
+        except pd.errors.EmptyDataError as exc:
+            raise DataValidationError(
+                f"Dataset file '{self.dataset_path}' contains no parseable CSV data."
+            ) from exc
         except Exception as exc:
             raise DataValidationError(f"Failed to parse CSV file '{self.dataset_path}': {exc}") from exc
 
@@ -69,8 +100,15 @@ class MovieDataLoader:
         )
 
     def _load_optional_ratings(self, valid_movie_ids: set[int]) -> pd.DataFrame | None:
-        """Load real user ratings if a valid ratings CSV is configured and exists."""
-        if self.ratings_path is None or not self.ratings_path.exists():
+        """
+        Load and deduplicate real user ratings if a valid ratings CSV is configured and exists.
+
+        Deduplication policy for multiple ratings by the same (user_id, movie_id):
+        - If a valid numeric `timestamp` column is present, records are ordered by `timestamp`
+          ascending and the most recent rating (`keep="last"`) is retained.
+        - Otherwise, the latest entry in file order (`keep="last"`) is retained.
+        """
+        if self.ratings_path is None or not self.ratings_path.exists() or self.ratings_path.is_dir():
             return None
 
         logger.info("Loading optional user ratings from '%s'", self.ratings_path)
@@ -80,18 +118,26 @@ class MovieDataLoader:
             logger.warning("Could not read ratings file '%s': %s", self.ratings_path, exc)
             return None
 
-        required_cols = {"userId", "movieId", "rating"}
-        if not required_cols.issubset(set(raw_ratings.columns)):
-            logger.warning("Ratings file '%s' does not contain required columns %s", self.ratings_path, required_cols)
+        if {"userId", "movieId", "rating"}.issubset(set(raw_ratings.columns)):
+            u_col, m_col, r_col = "userId", "movieId", "rating"
+        elif {"user_id", "movie_id", "rating"}.issubset(set(raw_ratings.columns)):
+            u_col, m_col, r_col = "user_id", "movie_id", "rating"
+        else:
+            logger.warning(
+                "Ratings file '%s' does not contain required columns (userId/user_id, movieId/movie_id, rating).",
+                self.ratings_path,
+            )
             return None
 
-        user_id = pd.to_numeric(raw_ratings["userId"], errors="coerce")
-        movie_id = pd.to_numeric(raw_ratings["movieId"], errors="coerce")
-        rating = pd.to_numeric(raw_ratings["rating"], errors="coerce")
+        user_id = pd.to_numeric(raw_ratings[u_col], errors="coerce")
+        movie_id = pd.to_numeric(raw_ratings[m_col], errors="coerce")
+        rating = pd.to_numeric(raw_ratings[r_col], errors="coerce")
 
         valid_mask = (
             user_id.notna()
             & movie_id.notna()
+            & (user_id > 0)
+            & (movie_id > 0)
             & rating.notna()
             & (rating >= 0.5)
             & (rating <= 5.0)
@@ -104,9 +150,24 @@ class MovieDataLoader:
                 "rating": rating.loc[valid_mask].astype(float),
             }
         )
+        if "timestamp" in raw_ratings.columns:
+            ts = pd.to_numeric(raw_ratings.loc[valid_mask, "timestamp"], errors="coerce")
+            if ts.notna().any():
+                cleaned["timestamp"] = ts.fillna(-1).astype(int)
+                cleaned = cleaned.sort_values(by="timestamp", ascending=True, kind="mergesort")
+
         if cleaned.empty:
             logger.info("No overlapping user ratings found for active catalog movie IDs.")
             return None
 
-        logger.info("Loaded %d verified user-movie rating interactions.", len(cleaned))
+        before_dedup = len(cleaned)
+        cleaned = cleaned.drop_duplicates(subset=["user_id", "movie_id"], keep="last")
+        if "timestamp" in cleaned.columns:
+            cleaned = cleaned.drop(columns=["timestamp"])
+
+        logger.info(
+            "Loaded %d unique user-movie interactions (removed %d duplicate rating logs).",
+            len(cleaned),
+            before_dedup - len(cleaned),
+        )
         return cleaned.reset_index(drop=True)
