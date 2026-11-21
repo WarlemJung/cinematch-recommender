@@ -1,14 +1,14 @@
-# Arquitetura de Software e Machine Learning — CineMatch (v2.0.1)
+# Arquitetura de Software e Machine Learning — CineMatch (v2.1.0)
 
 ## 1. Visão Geral
 
-O **CineMatch (`cinematch-recommender` v2.0.1)** é um motor híbrido de recomendação de filmes projetado segundo os princípios **SOLID, Clean Architecture, separação estrita de responsabilidades e eficiência computacional em matrizes esparsas**.
+O **CineMatch (`cinematch-recommender` v2.1.0)** é um motor híbrido de recomendação de filmes projetado segundo os princípios **SOLID, Clean Architecture, separação estrita de responsabilidades e eficiência computacional em matrizes esparsas**.
 
 A aplicação utiliza uma arquitetura modular em camadas sob o pacote `src/cinematch/`, permitindo:
-- Escalabilidade de memória de $O(N^2)$ (**3,2 GB – 16,5 GB**) para $O(\text{nnz})$ (**12,3 MB** para 45.430 filmes).
-- Execução em produção via servidor WSGI **Gunicorn (`cinematch.wsgi:app`)** com `--preload` e singleton por processo, compartilhando o catálogo e a matriz CSR esparsa via *Copy-on-Write (CoW)* entre workers sem duplicar a inicialização dos modelos.
+- Escalabilidade de memória de $O(N^2)$ (**3,2 GB – 16,5 GB**) para $O(\text{nnz})$ (**12,3 MB** na matriz esparsa TF-IDF para 45.430 filmes) e compartilhamento *zero-copy* do `movies_df` entre serviços e modelos (`624,1 MiB` totais no container Docker com 2 workers sob carga).
+- Execução em produção via servidor WSGI **Gunicorn (`cinematch.wsgi:app`)** com `--preload` e singleton thread-safe por processo (`get_wsgi_app()`), compartilhando o catálogo e as matrizes via *Copy-on-Write (CoW)*.
 - Injeção de dependências via *Application Factory* (`create_app`), eliminando estado global mutável em tempo de importação.
-- Combinação ponderada calibrada por consulta e com *gating* temático entre **Content-Based Filtering**, **Demographic Filtering** e **Collaborative Filtering**, com explicabilidade automática em linguagem natural.
+- Combinação ponderada calibrada por consulta e com *gating* temático entre **Content-Based Filtering**, **Demographic Filtering** e **Collaborative Filtering** (ativado opcionalmente com MovieLens `ml-latest-small`), com explicabilidade em linguagem natural.
 
 ---
 

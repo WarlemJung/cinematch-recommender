@@ -195,3 +195,90 @@ def test_movie_data_loader_edge_cases_empty_directory_corrupted_and_permissions(
     monkeypatch.setattr(pd, "read_csv", raise_perm_error)
     with pytest.raises(DataValidationError, match="Permission denied"):
         MovieDataLoader(dataset_path=bad_csv).load()
+
+
+def test_prepare_movielens_ratings_mapping_dedup_and_validation(
+    tmp_path: Path,
+    raw_movies_dataframe: pd.DataFrame,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import zipfile
+    from cinematch.data.movielens import prepare_movielens_ratings
+
+    movies_csv = tmp_path / "movies_metadata.csv"
+    raw_movies_dataframe.to_csv(movies_csv, index=False)
+
+    ml_dir = tmp_path / "ml_dir"
+    ml_dir.mkdir()
+    pd.DataFrame(
+        [
+            {"movieId": 1, "imdbId": "0114709", "tmdbId": 862},
+            {"movieId": 2, "imdbId": "0120363", "tmdbId": 863},
+            {"movieId": 999, "imdbId": "0000000", "tmdbId": None},
+        ]
+    ).to_csv(ml_dir / "links.csv", index=False)
+    pd.DataFrame(
+        [
+            {"userId": 1, "movieId": 1, "rating": 3.0, "timestamp": 100},
+            {"userId": 1, "movieId": 1, "rating": 5.0, "timestamp": 200},
+            {"userId": 2, "movieId": 2, "rating": 4.5, "timestamp": 150},
+            {"userId": 2, "movieId": 999, "rating": 4.0, "timestamp": 160},
+        ]
+    ).to_csv(ml_dir / "ratings.csv", index=False)
+
+    out_csv = tmp_path / "out" / "ratings.csv"
+    report = prepare_movielens_ratings(
+        movies_metadata_path=movies_csv,
+        output_ratings_path=out_csv,
+        source_dir=ml_dir,
+        download_if_missing=False,
+    )
+    assert report.deduplicated_rows == 2
+    assert report.distinct_users == 2
+    assert report.distinct_movies == 2
+    saved_df = pd.read_csv(out_csv)
+    assert float(saved_df.loc[saved_df["userId"] == 1, "rating"].iloc[0]) == 5.0
+
+    # Also validate zip ingestion path
+    zip_path = tmp_path / "ml.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.write(ml_dir / "links.csv", arcname="ml-latest-small/links.csv")
+        zf.write(ml_dir / "ratings.csv", arcname="ml-latest-small/ratings.csv")
+    out_zip_csv = tmp_path / "out_zip" / "ratings.csv"
+    zip_report = prepare_movielens_ratings(
+        movies_metadata_path=movies_csv,
+        output_ratings_path=out_zip_csv,
+        source_zip=zip_path,
+        download_if_missing=False,
+    )
+    assert zip_report.deduplicated_rows == 2
+
+    # Error handling for missing files / download failure
+    with pytest.raises(DataValidationError, match="must contain both"):
+        prepare_movielens_ratings(movies_csv, out_zip_csv, source_dir=tmp_path, download_if_missing=False)
+    with pytest.raises(DataValidationError, match="does not exist"):
+        prepare_movielens_ratings(movies_csv, out_zip_csv, source_zip=tmp_path / "missing.zip", download_if_missing=False)
+    with pytest.raises(DataValidationError, match="No local MovieLens source"):
+        prepare_movielens_ratings(movies_csv, out_zip_csv, download_if_missing=False)
+
+    # Mock download_movielens_small via monkeypatch for download_if_missing=True branch
+    from cinematch.data import movielens as ml_mod
+
+    zip_bytes = zip_path.read_bytes()
+
+    class _FakeResp:
+        def __enter__(self) -> _FakeResp:
+            return self
+
+        def __exit__(self, *_a: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return zip_bytes
+
+    monkeypatch.setattr(ml_mod.urllib.request, "urlopen", lambda *_a, **_k: _FakeResp())
+    dl_report = prepare_movielens_ratings(
+        movies_csv, tmp_path / "dl" / "ratings.csv", download_if_missing=True
+    )
+    assert dl_report.source == "GroupLens ml-latest-small.zip"
+    assert dl_report.deduplicated_rows == 2

@@ -73,6 +73,7 @@ class DemographicRecommender:
         self._params: DemographicParameters | None = None
         self._all_scores: np.ndarray | None = None
         self._normalized_scores: np.ndarray | None = None
+        self._qualifies_mask: np.ndarray | None = None
 
     @property
     def is_fitted(self) -> bool:
@@ -114,20 +115,22 @@ class DemographicRecommender:
         else:
             norm_scores = np.full_like(scores, 0.5)
 
-        df_copy = movies_df.copy().reset_index(drop=True)
-        df_copy["score"] = np.round(scores, 4)
-        df_copy["normalized_demographic_score"] = np.round(norm_scores, 4)
-        df_copy["qualifies_demographic"] = v >= min_m
+        qualifies_mask = v >= min_m
+        if isinstance(movies_df.index, pd.RangeIndex) and movies_df.index.start == 0 and movies_df.index.step == 1:
+            shared_df = movies_df
+        else:
+            shared_df = movies_df.reset_index(drop=True)
 
-        self._df = df_copy
+        self._df = shared_df
         self._all_scores = scores
         self._normalized_scores = norm_scores
+        self._qualifies_mask = qualifies_mask
         self._params = DemographicParameters(
             mean_vote_c=round(mean_c, 4),
             min_votes_m=round(min_m, 2),
             quantile=self.quantile,
-            qualifying_count=int(np.sum(v >= min_m)),
-            total_count=len(df_copy),
+            qualifying_count=int(np.sum(qualifies_mask)),
+            total_count=len(shared_df),
         )
         return self
 
@@ -153,41 +156,54 @@ class DemographicRecommender:
         strict_qualification: bool = True,
     ) -> pd.DataFrame:
         """Return top_n movies ranked by Weighted Rating, with optional filtering."""
-        if not self.is_fitted or self._df is None:
+        if not self.is_fitted or self._df is None or self._all_scores is None or self._normalized_scores is None:
             raise ModelNotTrainedError("DemographicRecommender")
         if top_n < 1:
             raise InvalidParameterError("top_n must be at least 1.")
 
-        candidates = self._df
-        if strict_qualification:
-            qualified = candidates.loc[candidates["qualifies_demographic"]]
-            if len(qualified) >= min(top_n, len(candidates)):
-                candidates = qualified
+        mask = np.ones(len(self._df), dtype=bool)
+        if strict_qualification and self._qualifies_mask is not None:
+            if int(np.sum(self._qualifies_mask)) >= min(top_n, len(self._df)):
+                mask &= self._qualifies_mask
 
         if genre:
             genre_lower = genre.strip().lower()
-            candidates = candidates.loc[
-                candidates["genres_list"].apply(
-                    lambda g_list: any(g.lower() == genre_lower for g in g_list)
-                )
-            ]
+            genre_mask = self._df["genres_list"].apply(
+                lambda g_list: any(g.lower() == genre_lower for g in g_list)
+            ).to_numpy(dtype=bool)
+            mask &= genre_mask
 
-        if min_year is not None and "release_year" in candidates.columns:
-            candidates = candidates.loc[candidates["release_year"] >= min_year]
+        if min_year is not None and "release_year" in self._df.columns:
+            mask &= (self._df["release_year"].to_numpy() >= min_year)
 
-        if max_year is not None and "release_year" in candidates.columns:
-            candidates = candidates.loc[
-                (candidates["release_year"] > 0) & (candidates["release_year"] <= max_year)
-            ]
+        if max_year is not None and "release_year" in self._df.columns:
+            years = self._df["release_year"].to_numpy()
+            mask &= (years > 0) & (years <= max_year)
 
         if min_rating is not None:
-            candidates = candidates.loc[candidates["vote_average"] >= min_rating]
+            mask &= (self._df["vote_average"].to_numpy() >= min_rating)
 
-        ranked = candidates.sort_values(
-            by=["score", "vote_count", "popularity"],
-            ascending=[False, False, False],
+        candidate_indices = np.flatnonzero(mask)
+        if len(candidate_indices) == 0:
+            empty = self._df.iloc[:0].copy()
+            empty["score"] = pd.Series(dtype=float)
+            empty["normalized_demographic_score"] = pd.Series(dtype=float)
+            return empty
+
+        cand_scores = np.round(self._all_scores[candidate_indices], 4)
+        cand_votes = self._df["vote_count"].to_numpy(dtype=float)[candidate_indices]
+        cand_pop = (
+            self._df["popularity"].to_numpy(dtype=float)[candidate_indices]
+            if "popularity" in self._df.columns
+            else np.zeros(len(candidate_indices), dtype=float)
         )
-        return ranked.head(top_n).copy()
+        order = np.lexsort((-cand_pop, -cand_votes, -cand_scores))
+        top_pos = candidate_indices[order[:top_n]]
+
+        result = self._df.iloc[top_pos].copy()
+        result["score"] = np.round(self._all_scores[top_pos], 4)
+        result["normalized_demographic_score"] = np.round(self._normalized_scores[top_pos], 4)
+        return result
 
     def to_records(self, top_n: int = 12, **filters: Any) -> list[dict[str, Any]]:
         """Return demographic recommendations as a list of dictionaries."""

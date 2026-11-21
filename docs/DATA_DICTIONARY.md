@@ -4,7 +4,8 @@
 
 - **Dataset Principal:** `movies_metadata.csv` (*The Movies Dataset*, compilado a partir de metadados públicos do TMDB / MovieLens).
 - **Licença dos Dados:** CC0: Public Domain / TMDB API Terms of Use (atribuição não comercial preservada na interface e documentação).
-- **Dataset Opcional de Avaliações (Collaborative Filtering):** `ratings.csv` ou `ratings_small.csv` (formato GroupLens MovieLens: `userId,movieId,rating,timestamp`).
+- **Dataset Opcional de Avaliações (Collaborative Filtering):** `data/ratings.csv` (preparado de forma reproduzível via `python scripts/prepare_movielens.py` a partir do **GroupLens MovieLens `ml-latest-small`**, mapeado para `tmdbId` via `links.csv` no formato `userId,movieId,rating,timestamp`; uso educacional e de pesquisa conforme termos do GroupLens — não redistribuído no Git).
+  - Estatísticas reais da preparação (`MovieLensPreparationReport`): `100.836` avaliações brutas $\rightarrow$ `100.823` com `tmdbId` $\rightarrow$ `100.330` no catálogo CineMatch $\rightarrow$ `100.329` únicas após deduplicação (`610` usuários distintos, `9.525` filmes distintos, esparsidade `0.982732`).
 
 ---
 

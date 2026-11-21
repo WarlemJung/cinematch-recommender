@@ -2,7 +2,7 @@ name: CineMatch CI
 
 on:
   push:
-    branches: [main, master, "fix/**"]
+    branches: [main, master, "fix/**", "feat/**"]
   pull_request:
     branches: [main, master]
 
@@ -28,10 +28,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install package and dev dependencies from pyproject.toml
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --no-cache-dir -e ".[dev]"
 
       - name: Verify Python syntax compilation
         run: |
@@ -62,3 +62,19 @@ jobs:
         run: |
           pip check
           pip-audit --skip-editable
+
+  docker-build-smoke:
+    name: Docker Production Image Build & Non-Root Smoke Check
+    needs: quality-and-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build production Docker image
+        run: |
+          docker build -t cinematch-recommender:ci .
+
+      - name: Verify non-root user and WSGI Gunicorn import in container
+        run: |
+          docker run --rm cinematch-recommender:ci sh -c "id -u | grep -qx 10001 && python -c 'import cinematch.wsgi; import gunicorn; print(cinematch.wsgi.__name__)'"

@@ -31,7 +31,7 @@ Retorna o estado operacional da aplicação, métricas de memória da matriz esp
 {
   "status": "healthy",
   "service": "CineMatch Hybrid Recommendation Engine",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "catalog_size": 45430,
   "models": {
     "demographic_fitted": true,
@@ -166,8 +166,8 @@ Retorna recomendações do motor híbrido com scores individuais, pesos ativos n
   "algorithm": "hybrid_weighted_ensemble",
   "collaborative_active": false,
   "active_weights": {
-    "content": 0.7222,
-    "demographic": 0.2778,
+    "content": 0.8333,
+    "demographic": 0.1667,
     "collaborative": 0.0
   },
   "source_movie": {
@@ -195,8 +195,8 @@ Retorna recomendações do motor híbrido com scores individuais, pesos ativos n
         "collaborative": null
       },
       "active_weights": {
-        "content": 0.7222,
-        "demographic": 0.2778,
+        "content": 0.8333,
+        "demographic": 0.1667,
         "collaborative": 0.0
       },
       "explanation": "Recomendado porque faz parte da mesma franquia (Toy Story Collection), apresenta alta similaridade temática e narrativa com o filme selecionado, compartilha os gêneros Animation, Family, Comedy, foi produzido pelo mesmo estúdio (Pixar Animation Studios) e possui excelente avaliação geral (7.6/10 em 4710 votos)."

@@ -1,6 +1,6 @@
 # 🎬 CineMatch — Hybrid Movie Recommendation Engine
 
-![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B%20%7C%203.13-3776AB?logo=python&logoColor=white)
+![Python 3.12 | 3.13](https://img.shields.io/badge/Python-3.12%20%7C%203.13-3776AB?logo=python&logoColor=white)
 ![Flask 3.1](https://img.shields.io/badge/Flask-3.1-000000?logo=flask&logoColor=white)
 ![Scikit-Learn](https://img.shields.io/badge/scikit--learn-Sparse%20TF--IDF%20%26%20SVD-F7931E?logo=scikit-learn&logoColor=white)
 ![Pydantic v2](https://img.shields.io/badge/Pydantic-v2-E92063?logo=pydantic&logoColor=white)
@@ -184,15 +184,16 @@ python -m mypy src tests scripts app.py recommender.py
 
 ## 📊 11. Quantitative Evaluation Results
 
-Measured on the full validated catalog (`N = 45,430` movies, `K = 10`, `Q = 200` queries, `seed = 42`) using the **Feature-Holdout Anti-Leakage Protocol** (where `belongs_to_collection` is withheld from training features and combined with genre intersection strictly as the ground-truth relevance oracle):
+Measured on the validated catalog (`N = 45,430` movies, `K = 10`, strict disjoint `Q_val = 100` calibration & `Q_test = 200` holdout test, `seed = 42`, **without `genres_list` overlap**) with real **MovieLens `ml-latest-small`** ratings (`data/ratings.csv`, `610` users, chronological 70/15/15 split):
 
-| Algorithm | Precision@10 | Recall@10 | NDCG@10 | MAP@10 | Catalog Coverage | Intra-List Similarity | Diversity |
+| Algorithm | Precision@10 | Recall@10 | NDCG@10 | MAP@10 | HitRate@10 | Diversity@10 | Novelty@10 |
 |---|---|---|---|---|---|---|---|
-| **Demographic Filtering** | `0.0000` | `0.0000` | `0.0000` | `0.0000` | `0.0002` | `0.0171` | **`0.9829`** |
-| **Content-Based Filtering** | `0.2045` | `0.4231` | `0.4244` | `0.3531` | `0.0350` | `0.2508` | `0.7492` |
-| **Hybrid Recommendation** | **`0.2070`** | **`0.4358`** | **`0.4290`** | **`0.3558`** | **`0.0354`** | `0.2485` | `0.7515` |
+| **Demographic Filtering** | `0.0000` | `0.0000` | `0.0000` | `0.0000` | `0.0000` | **`0.9829`** | `0.4482` |
+| **Content-Based Filtering** | `0.1615` | `0.3474` | `0.3468` | `0.2744` | `0.6250` | `0.7449` | **`0.8209`** |
+| **Collaborative Filtering** *(warm)* | `0.0280` | `0.0622` | `0.0541` | `0.0289` | `0.2000` | `0.9788` | `0.6410` |
+| **Hybrid Recommendation (0.65/0.15/0.20)** | **`0.1675`** | **`0.3643`** | **`0.3604`** | **`0.2845`** | **`0.6500`** | `0.7491` | `0.8052` |
 
-See [docs/MODEL_EVALUATION.md](docs/MODEL_EVALUATION.md) for full methodology, hybrid weight sensitivity analysis, and formulas.
+All Hybrid improvements over Content-Based on `Q_test = 200` are statistically significant at $\alpha = 0.05$ (95% paired bootstrap CI excluding zero; `NDCG@10` $p = 0.0008$). Prepare optional MovieLens ratings via `python scripts/prepare_movielens.py` and run load profiling via `python scripts/load_test.py`. See [docs/MODEL_EVALUATION.md](docs/MODEL_EVALUATION.md) for full methodology, observed user preference holdout, and confidence intervals.
 
 ---
 

@@ -19,7 +19,10 @@ class MovieService:
         movies_df: pd.DataFrame,
         tmdb_image_base_url: str = "https://image.tmdb.org/t/p/w500",
     ) -> None:
-        self._df = movies_df.copy().reset_index(drop=True)
+        if isinstance(movies_df.index, pd.RangeIndex) and movies_df.index.start == 0 and movies_df.index.step == 1:
+            self._df = movies_df
+        else:
+            self._df = movies_df.reset_index(drop=True)
         self._tmdb_image_base_url = tmdb_image_base_url.rstrip("/")
         self._id_to_idx: dict[int, int] = {
             int(mid): idx for idx, mid in enumerate(self._df["movie_id"].tolist())
@@ -110,45 +113,43 @@ class MovieService:
         if page_size < 1:
             raise InvalidParameterError("page_size must be >= 1.")
 
-        candidates = self._df.copy()
+        import numpy as np
+
+        mask = np.ones(len(self._df), dtype=bool)
 
         if genre:
             g_low = genre.strip().lower()
-            candidates = candidates.loc[
-                candidates["genres_list"].apply(
-                    lambda gl: any(str(g).lower() == g_low for g in gl)
-                )
-            ]
+            mask &= self._df["genres_list"].apply(
+                lambda gl: any(str(g).lower() == g_low for g in gl)
+            ).to_numpy(dtype=bool)
 
         if min_year is not None:
-            candidates = candidates.loc[candidates["release_year"] >= min_year]
+            mask &= (self._df["release_year"].to_numpy() >= min_year)
 
         if max_year is not None:
-            candidates = candidates.loc[
-                (candidates["release_year"] > 0) & (candidates["release_year"] <= max_year)
-            ]
+            years = self._df["release_year"].to_numpy()
+            mask &= (years > 0) & (years <= max_year)
 
         if min_rating is not None:
-            candidates = candidates.loc[candidates["vote_average"] >= min_rating]
+            mask &= (self._df["vote_average"].to_numpy() >= min_rating)
 
         norm_q = normalize_title(query) if query else ""
         if norm_q:
             escaped_q = re.escape(norm_q)
-            exact_mask = candidates["normalized_title"] == norm_q
-            prefix_mask = candidates["normalized_title"].str.startswith(norm_q, na=False)
-            contains_mask = candidates["normalized_title"].str.contains(escaped_q, na=False)
-
-            candidates = candidates.loc[contains_mask].copy()
+            mask &= self._df["normalized_title"].str.contains(escaped_q, na=False).to_numpy(dtype=bool)
+            candidates = self._df.loc[mask].copy()
             if not candidates.empty:
+                exact_mask = candidates["normalized_title"] == norm_q
+                prefix_mask = candidates["normalized_title"].str.startswith(norm_q, na=False)
                 candidates["_match_tier"] = 2
-                candidates.loc[prefix_mask.loc[candidates.index], "_match_tier"] = 1
-                candidates.loc[exact_mask.loc[candidates.index], "_match_tier"] = 0
+                candidates.loc[prefix_mask, "_match_tier"] = 1
+                candidates.loc[exact_mask, "_match_tier"] = 0
                 candidates = candidates.sort_values(
                     by=["_match_tier", "vote_count", "popularity"],
                     ascending=[True, False, False],
                 )
         else:
-            candidates = candidates.sort_values(
+            candidates = self._df.loc[mask].sort_values(
                 by=["vote_count", "vote_average", "popularity"],
                 ascending=[False, False, False],
             )

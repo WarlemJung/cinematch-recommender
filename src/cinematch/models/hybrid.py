@@ -104,7 +104,10 @@ class HybridRecommender:
         if self.collaborative_model is not None and not self.collaborative_model.is_fitted:
             self.collaborative_model.fit(movies_df, ratings_df=ratings_df)
 
-        self._df = movies_df.copy().reset_index(drop=True)
+        if isinstance(movies_df.index, pd.RangeIndex) and movies_df.index.start == 0 and movies_df.index.step == 1:
+            self._df = movies_df
+        else:
+            self._df = movies_df.reset_index(drop=True)
         return self
 
     def _build_explanation(

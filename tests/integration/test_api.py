@@ -117,7 +117,7 @@ def test_health_endpoint_healthy(client: FlaskClient) -> None:
     assert res.status_code == 200
     data = res.get_json()
     assert data["status"] == "healthy"
-    assert data["version"] == "2.0.1"
+    assert data["version"] == "2.1.0"
     assert data["catalog_size"] == 8
     assert data["models"]["demographic_fitted"] is True
     assert data["models"]["content_based_fitted"] is True
@@ -234,3 +234,36 @@ def test_hybrid_recommendations_endpoints(client: FlaskClient) -> None:
     res_q = client.get("/api/recommendations/hybrid?title=Pulp+Fiction&top_n=2")
     assert res_q.status_code == 200
     assert res_q.get_json()["source_movie"]["movie_id"] == 680
+
+
+def test_concurrent_wsgi_singleton_and_api_requests(
+    tmp_path: Path,
+    raw_movies_dataframe: pd.DataFrame,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    csv_path = tmp_path / "movies_metadata.csv"
+    raw_movies_dataframe.to_csv(csv_path, index=False)
+    monkeypatch.setenv("CINEMATCH_ENV", "production")
+    monkeypatch.setenv("CINEMATCH_DEBUG", "false")
+    monkeypatch.setenv("CINEMATCH_DATASET_PATH", str(csv_path))
+
+    wsgi_module.get_wsgi_app(force_reload=True)
+
+    def _call_concurrent(idx: int) -> tuple[int, int]:
+        w_app = wsgi_module.get_wsgi_app(force_reload=False)
+        res = w_app.test_client().get(
+            "/api/recommendations/hybrid/862?top_n=3"
+            if idx % 2 == 0
+            else "/api/movies/search?q=Heat"
+        )
+        return id(w_app), res.status_code
+
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        results = list(ex.map(_call_concurrent, range(18)))
+
+    app_ids = {app_id for app_id, _ in results}
+    statuses = [status for _, status in results]
+    assert len(app_ids) == 1
+    assert all(status == 200 for status in statuses)

@@ -1,6 +1,6 @@
 # 🎬 CineMatch — Motor Híbrido de Recomendação de Filmes
 
-![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B%20%7C%203.13-3776AB?logo=python&logoColor=white)
+![Python 3.12 | 3.13](https://img.shields.io/badge/Python-3.12%20%7C%203.13-3776AB?logo=python&logoColor=white)
 ![Flask 3.1](https://img.shields.io/badge/Flask-3.1-000000?logo=flask&logoColor=white)
 ![Scikit-Learn](https://img.shields.io/badge/scikit--learn-Sparse%20TF--IDF%20%26%20SVD-F7931E?logo=scikit-learn&logoColor=white)
 ![Pydantic v2](https://img.shields.io/badge/Pydantic-v2-E92063?logo=pydantic&logoColor=white)
@@ -174,15 +174,16 @@ python -m mypy src tests scripts app.py recommender.py
 
 ## 📊 10. Métricas Reais de Avaliação
 
-Medidas sobre o catálogo completo validado (`N = 45.430` filmes, `K = 10`, `Q = 200` consultas, `seed = 42`) utilizando o **Protocolo Anti-Leakage de Holdout de Atributo** (onde `belongs_to_collection` é ocultado das features de treino e combinado com verificação de interseção de gênero exclusivamente como oráculo ground-truth de teste):
+Medidas no catálogo validado (`N = 45.430` filmes, `K = 10`, separação estrita `Q_val = 100` validação e `Q_test = 200` teste em holdout, `seed = 42`, **sem sobreposição com `genres_list`**) com avaliações reais do **MovieLens `ml-latest-small`** (`data/ratings.csv`, `610` usuários, split temporal 70/15/15):
 
-| Algoritmo | Precision@10 | Recall@10 | NDCG@10 | MAP@10 | Catalog Coverage | Intra-List Similarity | Diversity |
+| Algoritmo | Precision@10 | Recall@10 | NDCG@10 | MAP@10 | HitRate@10 | Diversity@10 | Novelty@10 |
 |---|---|---|---|---|---|---|---|
-| **Demographic Filtering** | `0.0000` | `0.0000` | `0.0000` | `0.0000` | `0.0002` | `0.0171` | **`0.9829`** |
-| **Content-Based Filtering** | `0.2045` | `0.4231` | `0.4244` | `0.3531` | `0.0350` | `0.2508` | `0.7492` |
-| **Hybrid Recommendation** | **`0.2070`** | **`0.4358`** | **`0.4290`** | **`0.3558`** | **`0.0354`** | `0.2485` | `0.7515` |
+| **Demographic Filtering** | `0.0000` | `0.0000` | `0.0000` | `0.0000` | `0.0000` | **`0.9829`** | `0.4482` |
+| **Content-Based Filtering** | `0.1615` | `0.3474` | `0.3468` | `0.2744` | `0.6250` | `0.7449` | **`0.8209`** |
+| **Collaborative Filtering** *(warm)* | `0.0280` | `0.0622` | `0.0541` | `0.0289` | `0.2000` | `0.9788` | `0.6410` |
+| **Hybrid Recommendation (0.65/0.15/0.20)** | **`0.1675`** | **`0.3643`** | **`0.3604`** | **`0.2845`** | **`0.6500`** | `0.7491` | `0.8052` |
 
-Consulte [docs/MODEL_EVALUATION.md](docs/MODEL_EVALUATION.md) para a metodologia detalhada e a análise de sensibilidade dos pesos híbridos.
+Todos os ganhos do Híbrido sobre o Content-Based em `Q_test = 200` têm significância estatística a 95% (IC 95% pareado exclui zero; `NDCG@10` $p = 0,0008$). Prepare o MovieLens opcional via `python scripts/prepare_movielens.py` e execute testes de carga via `python scripts/load_test.py`. Consulte [docs/MODEL_EVALUATION.md](docs/MODEL_EVALUATION.md) para metodologia, holdout de preferência humana observada e intervalos de confiança.
 
 ---
 

@@ -1,4 +1,4 @@
-# Core Production Runtime Dependencies
+# Core Production Runtime Dependencies (synchronized 1:1 with pyproject.toml [project.dependencies])
 flask>=3.1.0,<4.0.0
 flask-cors>=6.0.0,<7.0.0
 gunicorn>=22.0.0,<28.0.0
@@ -9,10 +9,11 @@ python-dotenv>=1.0.1,<2.0.0
 scikit-learn>=1.6.0,<2.0.0
 scipy>=1.14.0,<2.0.0
 
-# Quality, Testing, Static Analysis & Security Auditing
+# Quality, Testing, Static Analysis, Load Profiling & Security Auditing (synchronized with [project.optional-dependencies.dev])
 coverage>=7.6.0
 mypy>=1.13.0
 pip-audit>=2.7.0
+psutil>=6.0.0
 pytest>=8.3.0
 pytest-cov>=6.0.0
 ruff>=0.8.0

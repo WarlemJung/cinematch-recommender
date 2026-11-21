@@ -48,6 +48,11 @@ def test_demographic_recommender_fitting_and_filtering(cleaned_dataset: LoadedDa
     anim_df = model.recommend(top_n=5, genre="Animation")
     assert all("Animation" in g_list for g_list in anim_df["genres_list"])
 
+    filtered_df = model.recommend(top_n=5, min_year=1994, max_year=2000, min_rating=7.0)
+    assert not filtered_df.empty
+    empty_df = model.recommend(top_n=5, min_year=2099)
+    assert empty_df.empty
+
     with pytest.raises(DataValidationError):
         DemographicRecommender().fit(pd.DataFrame())
 
@@ -214,3 +219,19 @@ def test_hybrid_recommender_weight_adjustment_gating_and_explanations(
         1.0,
         rel_tol=1e-3,
     )
+
+
+def test_collaborative_cold_start_new_user_new_movie_and_zero_history(
+    cleaned_dataset: LoadedDataset,
+    synthetic_ratings_dataframe: pd.DataFrame,
+) -> None:
+    collab = CollaborativeRecommender(n_components=4, min_interactions=2).fit(
+        cleaned_dataset.movies_df, ratings_df=synthetic_ratings_dataframe
+    )
+    assert not collab.has_user(999999)
+    assert not collab.has_item(999999)
+    assert collab.predict_catalog_scores(999999) is None
+    assert collab.recommend(999999, cleaned_dataset.movies_df, top_n=5).empty
+
+    # User with zero history falls back cleanly in Hybrid (collaborative_active=False for unseen movie)
+    assert collab.get_distinct_user_count(777) == 0

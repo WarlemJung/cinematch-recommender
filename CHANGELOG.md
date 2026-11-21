@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [2.1.0] - 2026-11-20
+
+### Added
+- **Reproducible MovieLens Integration (`src/cinematch/data/movielens.py` & `scripts/prepare_movielens.py`)**: Added optional GroupLens `ml-latest-small` ingestion mapping `movieId -> tmdbId` via `links.csv`, validating rating bounds `[0.5, 5.0]`, deduplicating `(user_id, movie_id)` by `timestamp`, and exporting `data/ratings.csv` (`100.329` unique interactions across `610` users and `9.525` catalog movies) without runtime network dependency in the API.
+- **Strict Train/Val/Test ML Evaluation & Expanded Metrics (`src/cinematch/models/evaluation.py`)**: Added `split_oracle_queries()` (`val_test_overlap = 0`), chronological per-user `split_ratings_train_val_test()`, `calibrate_hybrid_weights()` (strictly on validation queries), `hit_rate_at_k()`, normalized self-information `novelty_at_k()`, `evaluate_cold_start_stratification()`, `evaluate_user_level_collaborative_holdout()`, and `compute_paired_bootstrap_comparison()` with 95% confidence intervals.
+- **Load & Memory Profiling CLI (`scripts/load_test.py`)**: Added reproducible benchmark profiling cold start, `tracemalloc`, `psutil` RSS, sequential/concurrent/sustained latency percentiles (`p50`, `p95`, `p99`), and throughput, plus concurrent WSGI singleton tests (`tests/integration/test_api.py`).
+- **Docker CI Smoke Job (`.github/workflows/ci.yml`)**: Added `docker-build-smoke` job verifying production container build, non-root user (`UID 10001`), and `cinematch.wsgi` + `gunicorn` health.
+
+### Changed
+- **Unified Dependency Manifest (`pyproject.toml` & `requirements.txt`)**: Synchronized all runtime and dev dependency bounds 1:1 with `requires-python = ">=3.12"`, enforced by an automated unit test (`test_dependency_manifest_consistency_between_pyproject_and_requirements`) and unified CI installation (`pip install -e ".[dev]"`).
+- **Anti-Circularity Metadata Oracle (`build_relevance_oracle`)**: Set `require_genre_overlap=False` by default so metadata evaluation holds out `collection_name` without overlapping with `genres_list` TF-IDF features.
+- **Zero-Copy Shared Catalog DataFrame Optimization**: Eliminated redundant `movies_df.copy()` allocations in `DemographicRecommender`, `ContentBasedRecommender`, `HybridRecommender`, and `MovieService` (plus `MovieService.search_movies()`), reducing post-load Docker container memory from `790–920 MiB` (v2.0.1) to `624.1 MiB` (`-21.0%`) and worker `Private_Dirty` CoW overhead by ~60%.
+
+---
+
 ## [2.0.1] - 2026-11-20
 
 ### Added

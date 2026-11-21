@@ -154,9 +154,17 @@ class ContentBasedRecommender:
         if not required.issubset(set(movies_df.columns)):
             raise DataValidationError(f"ContentBasedRecommender requires columns: {sorted(required)}")
 
-        df_copy = movies_df.copy().reset_index(drop=True)
-        if "normalized_title" not in df_copy.columns:
-            df_copy["normalized_title"] = df_copy["title"].apply(normalize_title)
+        is_range_idx = (
+            isinstance(movies_df.index, pd.RangeIndex)
+            and movies_df.index.start == 0
+            and movies_df.index.step == 1
+        )
+        if "normalized_title" in movies_df.columns and is_range_idx:
+            df_copy = movies_df
+        else:
+            df_copy = movies_df.copy().reset_index(drop=True)
+            if "normalized_title" not in df_copy.columns:
+                df_copy["normalized_title"] = df_copy["title"].apply(normalize_title)
 
         records = df_copy.to_dict(orient="records")
         corpus = [self._build_weighted_document(row) for row in records]  # type: ignore[arg-type]
